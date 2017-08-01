@@ -1,0 +1,66 @@
+#!/bin/sh
+
+#### Переменные ####
+
+wan="bce1"
+wan_ip="194.183.172.130"
+lan="bce0"
+lan_ip="192.168.0.50"
+cmd="ipfw -q"
+
+#### Правила ####
+
+$cmd -f flush
+
+# Разрешаем весь траффик по внутреннему интерфейсу
+$cmd add 100 allow ip from any to any via lo0
+
+# Запрещаем доступ из вне к нутреннему интерфейсу
+$cmd add 200 deny ip from any to 127.0.0.0/8
+$cmd add 300 deny ip from 127.0.0.0/8 to any
+
+#
+$cmd add 310 allow ip from 192.168.0.0/24 to $lan_ip 
+$cmd add 320 allow ip from $lan_ip to 192.168.0.0/24
+# Разрешаем подключение по ssh
+$cmd add 400 allow tcp from any to $wan_ip 10022 in via $wan
+$cmd add 410 allow tcp from $wan_ip 10022 to any out via $wan established
+
+# Разрешаем DNS запросы
+$cmd add 500 allow udp from any to $wan_ip 53 in via $wan
+$cmd add 510 allow udp from $wan_ip 53 to any out via $wan established
+
+# Разрешаем UDP (для синхронизации времени - 123 порт)
+$cmd add 600 allow udp from any to $wan_ip 123 in via $wan
+$cmd add 610 allow udp from $wan_ip 123 to any out via $wan established
+#Пересылка пакетов на внутр. подсеть
+$cmd add 620 fwd 192.168.0.250 ip from any to 62.244.3.192/26 
+$cmd add 700 allow ip from 31.172.143.15 to me
+$cmd add 701 allow ip from  me to 31.172.143.15
+$cmd add 710 allow tcp from any to me 10022 
+$cmd add 720 allow tcp from 8.8.8.8 to me 
+# Разрешаем ftp снаружи (если необходимо)
+#$cmd add 700 allow tcp from any to $wan_ip 20,21 in via $wan
+#$cmd add 710 allow tcp from $wan_ip 20,21 to any out via $wan established
+#$cmd add 720 allow tcp from any to $wan_ip 49000-55000 in via $wan
+
+# Разрешаем некоторые типы ICMP траффика - эхо-запрос, эхо-ответ и время жизни пакета истекло
+#$cmd add 800  allow icmp from any to any icmptypes 0,8,11
+
+# Разрешаем все соединения на локальном интерфейсе
+$cmd add 900 allow all from any to any via $lan
+#$cmd add 900 allow all from any to any via tun0
+# Пример проброса портов 3389 и 80 в локальную сеть на два разных компьютера
+#$cmd nat 1 config log if $wan reset same_ports deny_in redirect_port tcp 10.20.30.2:3389 3389 redirect_port tcp 10.20.30.55:80 80
+
+# Включаем NAT
+$cmd add 1000 divert 8668 all from 192.168.0.0/24 to any via $wan
+$cmd add 1001 divert 8668 all from any to $wan_ip in recv $wan
+$cmd add 910 divert 8669 all from any to any via tun0
+$cmd add 911 divert 8669 all from any to $wan_ip in recv tun0
+#$cmd add 1000 nat ip from any to any via $wan
+
+# Запрещаем все, что не разрешено
+$cmd add 2000 allow all from any to any
+#$cmd add 65534 deny log all from any to any
+
