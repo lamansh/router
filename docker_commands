@@ -1,0 +1,10 @@
+docker run --name=consul1 -d -p 172.17.0.1:8500:8500 -p 172.17.0.1:53:8600/udp -p 31.172.143.13:8500:8500 -p 8400:8400 gliderlabs/consul-server -node myconsul -bootstrap -advertise 31.172.143.13 -client 0.0.0.0
+
+
+docker run -d --name=registrator --net=host -v /var/run/docker.sock:/tmp/docker.sock gliderlabs/registrator -internal consul://172.17.0.1:8500
+
+
+dig @172.17.0.1  ub6.service.consul
+
+
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' container_name_or_id
